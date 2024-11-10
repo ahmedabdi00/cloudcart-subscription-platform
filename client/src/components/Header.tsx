@@ -1,4 +1,4 @@
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { useUser } from "@/hooks/use-user";
 import { Button } from "@/components/ui/button";
 import {
@@ -11,26 +11,27 @@ import { ShoppingCart, User, Menu } from "lucide-react";
 
 export default function Header() {
   const { user, logout } = useUser();
+  const [location, setLocation] = useLocation();
 
   return (
     <header className="border-b">
       <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-        <Link href="/">
-          <a className="text-2xl font-bold">CloudCart</a>
-        </Link>
+        <Button variant="link" className="text-2xl font-bold p-0" onClick={() => setLocation("/")}>
+          CloudCart
+        </Button>
 
         <nav className="hidden md:flex items-center gap-6">
-          <Link href="/products">
-            <a className="text-sm font-medium">Products</a>
-          </Link>
-          <Link href="/subscription">
-            <a className="text-sm font-medium">Subscription</a>
-          </Link>
+          <Button variant="link" className="text-sm font-medium p-0" onClick={() => setLocation("/products")}>
+            Products
+          </Button>
+          <Button variant="link" className="text-sm font-medium p-0" onClick={() => setLocation("/subscription")}>
+            Subscription
+          </Button>
           {user ? (
             <>
-              <Link href="/orders">
-                <a className="text-sm font-medium">Orders</a>
-              </Link>
+              <Button variant="link" className="text-sm font-medium p-0" onClick={() => setLocation("/orders")}>
+                Orders
+              </Button>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" size="icon">
@@ -38,8 +39,8 @@ export default function Header() {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem asChild>
-                    <Link href="/profile">Profile</Link>
+                  <DropdownMenuItem onClick={() => setLocation("/profile")}>
+                    Profile
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => logout()}>
                     Logout
