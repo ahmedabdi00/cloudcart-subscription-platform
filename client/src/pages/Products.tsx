@@ -12,7 +12,7 @@ import {
 import ProductCard from "@/components/ProductCard";
 import { useCart } from "@/hooks/use-cart";
 import { useToast } from "@/hooks/use-toast";
-import { Search, SlidersHorizontal } from "lucide-react";
+import { Search } from "lucide-react";
 import type { Product } from "db/schema";
 
 export default function Products() {
@@ -20,8 +20,8 @@ export default function Products() {
   const { addItem } = useCart();
   const { toast } = useToast();
   const [search, setSearch] = useState("");
-  const [category, setCategory] = useState("");
-  const [brand, setBrand] = useState("");
+  const [category, setCategory] = useState("all");
+  const [brand, setBrand] = useState("all");
 
   const handleAddToCart = (product: Product) => {
     addItem(product);
@@ -35,8 +35,8 @@ export default function Products() {
     const matchesSearch = product.name
       .toLowerCase()
       .includes(search.toLowerCase());
-    const matchesCategory = !category || product.category === category;
-    const matchesBrand = !brand || product.brand === brand;
+    const matchesCategory = category === "all" || product.category === category;
+    const matchesBrand = brand === "all" || product.brand === brand;
     return matchesSearch && matchesCategory && matchesBrand;
   });
 
@@ -66,7 +66,7 @@ export default function Products() {
             <SelectValue placeholder="Category" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="">All Categories</SelectItem>
+            <SelectItem value="all">All Categories</SelectItem>
             {categories.map((cat) => (
               <SelectItem key={cat} value={cat}>
                 {cat}
@@ -79,7 +79,7 @@ export default function Products() {
             <SelectValue placeholder="Brand" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="">All Brands</SelectItem>
+            <SelectItem value="all">All Brands</SelectItem>
             {brands.map((b) => (
               <SelectItem key={b} value={b}>
                 {b}
@@ -98,6 +98,11 @@ export default function Products() {
             onAddToCart={handleAddToCart}
           />
         ))}
+        {filteredProducts?.length === 0 && (
+          <div className="col-span-full text-center py-12 text-muted-foreground">
+            No products found matching your criteria
+          </div>
+        )}
       </div>
     </div>
   );
