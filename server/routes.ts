@@ -1,13 +1,39 @@
 import { Express } from "express";
 import { setupAuth } from "./auth";
 import { db } from "db";
-import { products, orders, orderItems, subscriptions } from "db/schema";
-import { eq } from "drizzle-orm";
+import { products, orders, orderItems, subscriptions, subscriptionItems } from "db/schema";
+import { eq, and, gte } from "drizzle-orm";
 import Stripe from "stripe";
+import { addDays, addWeeks, addMonths, startOfWeek, setDay } from "date-fns";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: "2023-10-16",
 });
+
+function calculateNextDeliveryDate(frequencyType: string, customFrequency?: number, deliveryDay?: number) {
+  const now = new Date();
+  
+  switch (frequencyType) {
+    case 'weekly':
+      return deliveryDay !== undefined 
+        ? setDay(startOfWeek(addWeeks(now, 1)), deliveryDay)
+        : addWeeks(now, 1);
+    case 'biweekly':
+      return deliveryDay !== undefined
+        ? setDay(startOfWeek(addWeeks(now, 2)), deliveryDay)
+        : addWeeks(now, 2);
+    case 'monthly':
+      return deliveryDay !== undefined
+        ? new Date(now.getFullYear(), now.getMonth() + 1, deliveryDay)
+        : addMonths(now, 1);
+    case 'custom':
+      return customFrequency 
+        ? addDays(now, customFrequency)
+        : addMonths(now, 1);
+    default:
+      return addMonths(now, 1);
+  }
+}
 
 export function registerRoutes(app: Express) {
   setupAuth(app);
@@ -33,7 +59,7 @@ export function registerRoutes(app: Express) {
   app.post("/api/orders", async (req, res) => {
     if (!req.user) return res.status(401).json({ message: "Unauthorized" });
 
-    const { items, total } = req.body;
+    const { items, total, subscriptionId, scheduledDelivery } = req.body;
 
     try {
       const [order] = await db
@@ -42,6 +68,8 @@ export function registerRoutes(app: Express) {
           userId: req.user.id,
           total,
           status: "pending",
+          subscriptionId: subscriptionId || null,
+          scheduledDelivery: scheduledDelivery || null,
         })
         .returning();
 
@@ -68,29 +96,114 @@ export function registerRoutes(app: Express) {
       .select()
       .from(subscriptions)
       .where(eq(subscriptions.userId, req.user.id));
-    res.json(userSubscriptions);
+      
+    const subscriptionsWithItems = await Promise.all(
+      userSubscriptions.map(async (sub) => {
+        const items = await db
+          .select()
+          .from(subscriptionItems)
+          .where(eq(subscriptionItems.subscriptionId, sub.id));
+        return { ...sub, items };
+      })
+    );
+    
+    res.json(subscriptionsWithItems);
   });
 
   // Create subscription
   app.post("/api/subscriptions", async (req, res) => {
     if (!req.user) return res.status(401).json({ message: "Unauthorized" });
 
-    const { frequency, nextDelivery } = req.body;
+    const { 
+      items,
+      frequencyType,
+      customFrequency,
+      deliveryDay 
+    } = req.body;
 
     try {
+      const nextDelivery = calculateNextDeliveryDate(
+        frequencyType,
+        customFrequency,
+        deliveryDay
+      );
+
       const [subscription] = await db
         .insert(subscriptions)
         .values({
           userId: req.user.id,
-          frequency,
+          frequencyType,
+          customFrequency,
+          deliveryDay,
           nextDelivery,
           status: "active",
         })
         .returning();
 
+      await db.insert(subscriptionItems).values(
+        items.map((item: any) => ({
+          subscriptionId: subscription.id,
+          productId: item.id,
+          quantity: item.quantity,
+          price: item.price,
+        }))
+      );
+
+      // Create first order for the subscription
+      const total = items.reduce((sum: number, item: any) => 
+        sum + (item.price * item.quantity), 0
+      );
+
+      await db.insert(orders).values({
+        userId: req.user.id,
+        subscriptionId: subscription.id,
+        total,
+        status: "pending",
+        scheduledDelivery: nextDelivery,
+      });
+
       res.json(subscription);
     } catch (error) {
       res.status(500).json({ message: "Failed to create subscription" });
+    }
+  });
+
+  // Update subscription
+  app.patch("/api/subscriptions/:id", async (req, res) => {
+    if (!req.user) return res.status(401).json({ message: "Unauthorized" });
+
+    const { 
+      frequencyType,
+      customFrequency,
+      deliveryDay,
+      status 
+    } = req.body;
+
+    try {
+      const [subscription] = await db
+        .update(subscriptions)
+        .set({
+          frequencyType,
+          customFrequency,
+          deliveryDay,
+          status,
+          nextDelivery: calculateNextDeliveryDate(
+            frequencyType,
+            customFrequency,
+            deliveryDay
+          ),
+        })
+        .where(
+          and(
+            eq(subscriptions.id, parseInt(req.params.id)),
+            eq(subscriptions.userId, req.user.id)
+          )
+        )
+        .returning();
+
+      res.json(subscription);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to update subscription" });
     }
   });
 

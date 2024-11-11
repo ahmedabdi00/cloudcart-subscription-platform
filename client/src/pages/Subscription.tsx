@@ -5,16 +5,31 @@ import SubscriptionPlan from "@/components/SubscriptionPlan";
 import StripePayment from "@/components/StripePayment";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { createPaymentIntent } from "@/lib/stripe";
 
 const plans = [
   {
     name: "Starter",
     price: 29.99,
-    frequency: "month",
     features: [
-      "Monthly delivery",
+      "Flexible delivery schedule",
       "Up to 3 products",
       "Basic customization",
       "Email support",
@@ -23,9 +38,8 @@ const plans = [
   {
     name: "Premium",
     price: 49.99,
-    frequency: "month",
     features: [
-      "Bi-weekly delivery",
+      "Priority delivery options",
       "Up to 5 products",
       "Full customization",
       "Priority support",
@@ -35,9 +49,8 @@ const plans = [
   {
     name: "Ultimate",
     price: 79.99,
-    frequency: "month",
     features: [
-      "Weekly delivery",
+      "Custom delivery schedule",
       "Unlimited products",
       "Premium customization",
       "24/7 support",
@@ -51,6 +64,9 @@ export default function Subscription() {
   const { user } = useUser();
   const [, setLocation] = useLocation();
   const [selectedPlan, setSelectedPlan] = useState<typeof plans[0] | null>(null);
+  const [frequencyType, setFrequencyType] = useState<string>("monthly");
+  const [customFrequency, setCustomFrequency] = useState<number>();
+  const [deliveryDay, setDeliveryDay] = useState<number>();
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const { toast } = useToast();
 
@@ -87,8 +103,12 @@ export default function Subscription() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          frequency: selectedPlan?.frequency,
-          nextDelivery: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+          items: [{ id: 1, quantity: 1, price: selectedPlan?.price }], // Sample product
+          frequencyType,
+          customFrequency: frequencyType === "custom" ? customFrequency : undefined,
+          deliveryDay: ["weekly", "biweekly", "monthly"].includes(frequencyType)
+            ? deliveryDay
+            : undefined,
         }),
       });
 
@@ -129,6 +149,67 @@ export default function Subscription() {
         ))}
       </div>
 
+      {selectedPlan && (
+        <div className="max-w-md mx-auto space-y-4 border rounded-lg p-4">
+          <h2 className="text-xl font-semibold">Delivery Preferences</h2>
+          
+          <div className="space-y-2">
+            <Label htmlFor="frequency">Delivery Frequency</Label>
+            <Select
+              value={frequencyType}
+              onValueChange={setFrequencyType}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select frequency" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectItem value="weekly">Weekly</SelectItem>
+                  <SelectItem value="biweekly">Bi-weekly</SelectItem>
+                  <SelectItem value="monthly">Monthly</SelectItem>
+                  <SelectItem value="custom">Custom</SelectItem>
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {frequencyType === "custom" && (
+            <div className="space-y-2">
+              <Label htmlFor="customDays">Days between deliveries</Label>
+              <Input
+                id="customDays"
+                type="number"
+                min="1"
+                max="90"
+                value={customFrequency}
+                onChange={(e) => setCustomFrequency(parseInt(e.target.value))}
+              />
+            </div>
+          )}
+
+          {["weekly", "biweekly", "monthly"].includes(frequencyType) && (
+            <div className="space-y-2">
+              <Label htmlFor="deliveryDay">
+                Preferred {frequencyType === "monthly" ? "Day of Month" : "Day of Week"}
+              </Label>
+              <Input
+                id="deliveryDay"
+                type="number"
+                min={frequencyType === "monthly" ? "1" : "0"}
+                max={frequencyType === "monthly" ? "28" : "6"}
+                value={deliveryDay}
+                onChange={(e) => setDeliveryDay(parseInt(e.target.value))}
+              />
+              <p className="text-sm text-muted-foreground">
+                {frequencyType === "monthly"
+                  ? "Enter a day between 1-28"
+                  : "Enter 0-6 (Sunday-Saturday)"}
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="text-center">
         <Button size="lg" onClick={handleSubscribe}>
           {user ? "Subscribe Now" : "Sign in to Subscribe"}
@@ -139,11 +220,14 @@ export default function Subscription() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Complete your subscription</DialogTitle>
+            <DialogDescription>
+              Enter your payment details to start your subscription
+            </DialogDescription>
           </DialogHeader>
           {clientSecret && (
-            <StripePayment 
-              clientSecret={clientSecret} 
-              onSuccess={handlePaymentSuccess} 
+            <StripePayment
+              clientSecret={clientSecret}
+              onSuccess={handlePaymentSuccess}
             />
           )}
         </DialogContent>
