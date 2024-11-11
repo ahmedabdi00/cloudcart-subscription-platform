@@ -22,6 +22,7 @@ export const products = pgTable("products", {
   category: text("category").notNull(),
   brand: text("brand").notNull(),
   inStock: boolean("in_stock").default(true),
+  quantity: integer("quantity").notNull().default(0),
 });
 
 export const subscriptions = pgTable("subscriptions", {
