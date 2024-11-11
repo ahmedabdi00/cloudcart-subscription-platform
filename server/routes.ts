@@ -4,35 +4,46 @@ import { db } from "db";
 import { products, orders, orderItems, subscriptions, subscriptionItems } from "db/schema";
 import { eq, and, gte } from "drizzle-orm";
 import Stripe from "stripe";
-import { addDays, addWeeks, addMonths, startOfWeek, setDay } from "date-fns";
+import { addDays, addWeeks, addMonths, startOfWeek, setDay, isFuture } from "date-fns";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: "2023-10-16",
 });
 
-function calculateNextDeliveryDate(frequencyType: string, customFrequency?: number, deliveryDay?: number) {
-  const now = new Date();
+function calculateNextDeliveryDate(frequencyType: string, customFrequency?: number, deliveryDay?: number, baseDate: Date = new Date()) {
+  const now = baseDate;
+  let nextDelivery: Date;
   
   switch (frequencyType) {
     case 'weekly':
-      return deliveryDay !== undefined 
+      nextDelivery = deliveryDay !== undefined 
         ? setDay(startOfWeek(addWeeks(now, 1)), deliveryDay)
         : addWeeks(now, 1);
+      break;
     case 'biweekly':
-      return deliveryDay !== undefined
+      nextDelivery = deliveryDay !== undefined
         ? setDay(startOfWeek(addWeeks(now, 2)), deliveryDay)
         : addWeeks(now, 2);
+      break;
     case 'monthly':
-      return deliveryDay !== undefined
-        ? new Date(now.getFullYear(), now.getMonth() + 1, deliveryDay)
-        : addMonths(now, 1);
+      if (deliveryDay !== undefined) {
+        // Handle month end cases
+        nextDelivery = new Date(now.getFullYear(), now.getMonth() + 1, Math.min(deliveryDay, 28));
+      } else {
+        nextDelivery = addMonths(now, 1);
+      }
+      break;
     case 'custom':
-      return customFrequency 
+      nextDelivery = customFrequency 
         ? addDays(now, customFrequency)
         : addMonths(now, 1);
+      break;
     default:
-      return addMonths(now, 1);
+      nextDelivery = addMonths(now, 1);
   }
+
+  // Ensure delivery date is in the future
+  return isFuture(nextDelivery) ? nextDelivery : addDays(nextDelivery, 1);
 }
 
 export function registerRoutes(app: Express) {
@@ -81,6 +92,14 @@ export function registerRoutes(app: Express) {
           price: item.price,
         }))
       );
+
+      // If this is a subscription order, update the subscription's lastDelivery
+      if (subscriptionId) {
+        await db
+          .update(subscriptions)
+          .set({ lastDelivery: new Date() })
+          .where(eq(subscriptions.id, subscriptionId));
+      }
 
       res.json(order);
     } catch (error) {
@@ -133,8 +152,8 @@ export function registerRoutes(app: Express) {
         .values({
           userId: req.user.id,
           frequencyType,
-          customFrequency,
-          deliveryDay,
+          customFrequency: frequencyType === 'custom' ? customFrequency : null,
+          deliveryDay: ['weekly', 'biweekly', 'monthly'].includes(frequencyType) ? deliveryDay : null,
           nextDelivery,
           status: "active",
         })
@@ -180,18 +199,20 @@ export function registerRoutes(app: Express) {
     } = req.body;
 
     try {
+      const nextDelivery = calculateNextDeliveryDate(
+        frequencyType,
+        customFrequency,
+        deliveryDay
+      );
+
       const [subscription] = await db
         .update(subscriptions)
         .set({
           frequencyType,
-          customFrequency,
-          deliveryDay,
+          customFrequency: frequencyType === 'custom' ? customFrequency : null,
+          deliveryDay: ['weekly', 'biweekly', 'monthly'].includes(frequencyType) ? deliveryDay : null,
           status,
-          nextDelivery: calculateNextDeliveryDate(
-            frequencyType,
-            customFrequency,
-            deliveryDay
-          ),
+          nextDelivery,
         })
         .where(
           and(
@@ -200,6 +221,26 @@ export function registerRoutes(app: Express) {
           )
         )
         .returning();
+
+      if (subscription && subscription.status === 'active') {
+        // Create next scheduled order
+        const items = await db
+          .select()
+          .from(subscriptionItems)
+          .where(eq(subscriptionItems.subscriptionId, subscription.id));
+
+        const total = items.reduce((sum, item) => 
+          sum + (Number(item.price) * item.quantity), 0
+        );
+
+        await db.insert(orders).values({
+          userId: req.user.id,
+          subscriptionId: subscription.id,
+          total,
+          status: "pending",
+          scheduledDelivery: nextDelivery,
+        });
+      }
 
       res.json(subscription);
     } catch (error) {
