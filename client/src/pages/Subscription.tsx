@@ -2,9 +2,11 @@ import { useState } from "react";
 import { useUser } from "@/hooks/use-user";
 import { useLocation } from "wouter";
 import SubscriptionPlan from "@/components/SubscriptionPlan";
+import StripePayment from "@/components/StripePayment";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { createPaymentIntent, confirmPayment } from "@/lib/stripe";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { createPaymentIntent } from "@/lib/stripe";
 
 const plans = [
   {
@@ -49,6 +51,7 @@ export default function Subscription() {
   const { user } = useUser();
   const [, setLocation] = useLocation();
   const [selectedPlan, setSelectedPlan] = useState<typeof plans[0] | null>(null);
+  const [clientSecret, setClientSecret] = useState<string | null>(null);
   const { toast } = useToast();
 
   const handleSubscribe = async () => {
@@ -68,28 +71,38 @@ export default function Subscription() {
 
     try {
       const { clientSecret } = await createPaymentIntent(selectedPlan.price);
-      // In a real app, you'd integrate Stripe Elements here
-      const { error } = await confirmPayment(clientSecret, {
-        payment_method: { card: { /* card details */ } },
-      });
-
-      if (error) {
-        toast({
-          title: "Payment failed",
-          description: error.message,
-          variant: "destructive",
-        });
-      } else {
-        toast({
-          title: "Subscription activated",
-          description: "Your subscription has been successfully activated!",
-        });
-        setLocation("/profile");
-      }
+      setClientSecret(clientSecret);
     } catch (error) {
       toast({
         title: "Error",
         description: "Failed to process subscription",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handlePaymentSuccess = async () => {
+    try {
+      const response = await fetch("/api/subscriptions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          frequency: selectedPlan?.frequency,
+          nextDelivery: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+        }),
+      });
+
+      if (!response.ok) throw new Error("Failed to create subscription");
+
+      toast({
+        title: "Subscription activated",
+        description: "Your subscription has been successfully activated!",
+      });
+      setLocation("/profile");
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to activate subscription",
         variant: "destructive",
       });
     }
@@ -121,6 +134,20 @@ export default function Subscription() {
           {user ? "Subscribe Now" : "Sign in to Subscribe"}
         </Button>
       </div>
+
+      <Dialog open={!!clientSecret} onOpenChange={() => setClientSecret(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Complete your subscription</DialogTitle>
+          </DialogHeader>
+          {clientSecret && (
+            <StripePayment 
+              clientSecret={clientSecret} 
+              onSuccess={handlePaymentSuccess} 
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

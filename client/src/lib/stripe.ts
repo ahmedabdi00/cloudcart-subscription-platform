@@ -13,12 +13,3 @@ export async function createPaymentIntent(amount: number) {
   
   return response.json();
 }
-
-export async function confirmPayment(clientSecret: string, paymentMethod: any) {
-  const stripe = await stripePromise;
-  if (!stripe) throw new Error("Stripe failed to initialize");
-
-  return stripe.confirmCardPayment(clientSecret, {
-    payment_method: paymentMethod,
-  });
-}
