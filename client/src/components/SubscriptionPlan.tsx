@@ -5,7 +5,6 @@ import { Check } from "lucide-react";
 interface Plan {
   name: string;
   price: number;
-  frequency: string;
   features: string[];
 }
 
@@ -28,7 +27,7 @@ export default function SubscriptionPlan({
       <CardContent>
         <div className="flex items-baseline">
           <span className="text-3xl font-bold">${plan.price}</span>
-          <span className="text-muted-foreground ml-2">/{plan.frequency}</span>
+          <span className="text-muted-foreground ml-2">/month</span>
         </div>
         <ul className="mt-4 space-y-2">
           {plan.features.map((feature, index) => (

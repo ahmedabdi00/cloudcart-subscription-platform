@@ -24,7 +24,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createPaymentIntent } from "@/lib/stripe";
 
-const plans = [
+export type Plan = {
+  name: string;
+  price: number;
+  features: string[];
+};
+
+const plans: Plan[] = [
   {
     name: "Starter",
     price: 29.99,
@@ -63,10 +69,10 @@ const plans = [
 export default function Subscription() {
   const { user } = useUser();
   const [, setLocation] = useLocation();
-  const [selectedPlan, setSelectedPlan] = useState<typeof plans[0] | null>(null);
+  const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null);
   const [frequencyType, setFrequencyType] = useState<string>("monthly");
-  const [customFrequency, setCustomFrequency] = useState<number>();
-  const [deliveryDay, setDeliveryDay] = useState<number>();
+  const [customFrequency, setCustomFrequency] = useState<number>(30);
+  const [deliveryDay, setDeliveryDay] = useState<number>(1);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const { toast } = useToast();
 
@@ -103,7 +109,7 @@ export default function Subscription() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          items: [{ id: 1, quantity: 1, price: selectedPlan?.price }], // Sample product
+          items: [{ id: 1, quantity: 1, price: selectedPlan?.price }],
           frequencyType,
           customFrequency: frequencyType === "custom" ? customFrequency : undefined,
           deliveryDay: ["weekly", "biweekly", "monthly"].includes(frequencyType)
