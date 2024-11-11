@@ -16,8 +16,13 @@ export default function Header() {
   return (
     <header className="border-b">
       <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-        <Button variant="link" className="text-2xl font-bold p-0" onClick={() => setLocation("/")}>
-          CloudCart
+        <Button variant="link" className="flex items-center gap-2 p-0" onClick={() => setLocation("/")}>
+          <img
+            src="/images/main-logo-black.jpeg"
+            alt="CloudCart"
+            className="h-8 w-auto"
+          />
+          <span className="sr-only">CloudCart</span>
         </Button>
 
         <nav className="hidden md:flex items-center gap-6">
