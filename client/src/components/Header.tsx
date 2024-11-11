@@ -8,6 +8,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ShoppingCart, User, Menu } from "lucide-react";
+import { Logo } from "./Logo";
 
 export default function Header() {
   const { user, logout } = useUser();
@@ -15,14 +16,9 @@ export default function Header() {
 
   return (
     <header className="border-b">
-      <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-        <Button variant="link" className="flex items-center gap-2 p-0" onClick={() => setLocation("/")}>
-          <img
-            src="/images/main-logo-black.jpeg"
-            alt="CloudCart"
-            className="h-8 w-auto"
-          />
-          <span className="sr-only">CloudCart</span>
+      <div className="container mx-auto px-4 py-3 flex items-center justify-between">
+        <Button variant="link" className="flex items-center p-0 hover:no-underline" onClick={() => setLocation("/")}>
+          <Logo />
         </Button>
 
         <nav className="hidden md:flex items-center gap-6">
